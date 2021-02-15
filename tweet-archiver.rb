@@ -1,5 +1,6 @@
 #! /usr/bin/env ruby
 
+require 'pp'
 require 'colorize'
 require_relative 'b.option.rb'
 require_relative 'b.path.rb'
@@ -22,7 +23,6 @@ optn = B::Option.new(
   'uid'                         => "user ID",
   'count'                       => "count",
   'whois'                       => "user name",
-  'trends'                      => "WOEID (tokyo is 1118370)",
   'irb'                         => "ruby REPL",
   'toml'                        => "Config File",
 )
@@ -41,7 +41,6 @@ optn.essential(
 optn.normalizer(
   count:  'to_integer',
   uid:    'to_integer',
-  trends: 'to_integer',
 )
 optn.default toml:B::Path.xdgattempt('tweet-archiver.toml', :config)
 optn.make!
@@ -53,7 +52,7 @@ twitter = Twitter::REST::Client.new(
   access_token_secret: optn['twitter.access_token_secret'],
 )
 
-log = B::Log.new file:STDOUT, format:'%T.%1N'
+log = B::Log.new STDOUT, format:'%T.%1N'
 
 db = DB.new(
   host: optn['mongo.host'],
@@ -80,9 +79,9 @@ for f in optn.bare
 end
 
 if optn[:tweet]
-  result = twitter.status optn[:tweet]
-  pp result.to_h
-  p db.save! result
+  array = db.expand_reply db.status optn[:tweet]
+  # puts array.map(&:to_h).pretty_inspect.colorize :blue
+  db.save! array
 end
 
 if optn[:uid]
@@ -91,15 +90,14 @@ end
 
 if optn[:whois]
   for i in twitter.user_search(optn[:whois])
-    puts "#{i.screen_name} #{i.name} #{i.id.to_s.colorize :yellow} #{i.description.inspect}"
+    puts "#{i.id.to_s.colorize :yellow} @#{i.screen_name} #{i.name} #{i.description.inspect.colorize :cyan}"
   end
 end
 
-if optn[:trends]
-  db.save_trends optn[:trends]
-end
-
 if optn[:irb]
+  # Hello.
+  # you can use object twitter, which is a instance of Twitter::REST::Client
+  # you can use object db,      which is a instance of DB
   binding.irb
 end
 
