@@ -5,6 +5,7 @@ require 'colorize'
 require_relative 'b.option.rb'
 require_relative 'b.path.rb'
 require_relative 'b.log.rb'
+require_relative 'b.indentedtext.rb'
 require_relative 'extend.rb'
 require_relative 'db.rb'
 
@@ -19,14 +20,14 @@ optn = B::Option.new(
   'mongo.pw'                    => "Password",
   'mongo.auth'                  => "Authentication database",
   'tweet'                       => "tweet ID",
-  'uname'                       => "user name",
-  'uid'                         => "user ID",
+  'user'                        => "user ID",
   'count'                       => "count",
-  'whois'                       => "user name",
-  'irb'                         => "ruby REPL",
+  'whois'                       => "search user",
+  'known_users'                 => 'check all known users',
+  'repl'                        => "run Ruby REPL (irb)",
   'toml'                        => "Config File",
 )
-optn.boolean :irb
+optn.boolean :repl, :known_users
 optn.default(
   'mongo.host' => '127.0.0.1',
   'mongo.db'   => 'twitter',
@@ -37,10 +38,17 @@ optn.essential(
   'twitter.consumer_secret',
   'twitter.access_token',
   'twitter.access_token_secret',
+  'mongo.host',
+  'mongo.db',
+  'mongo.user',
+  'mongo.pw',
 )
 optn.normalizer(
   count:  'to_integer',
-  uid:    'to_integer',
+  user:   'to_integer',
+)
+optn.short(
+  'known_users' => 'k',
 )
 optn.default toml:B::Path.xdgattempt('tweet-archiver.toml', :config)
 optn.make!
@@ -66,26 +74,37 @@ db = DB.new(
 
 #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-for f in optn.bare
-  ids = open(f).each_line.map{ $&.to_i if _1 =~ /\d+/ }.compact
-  ids.each do
-    begin
-      result = db.up _1, count:200
-      log.d _1, result.size
-      sleep 1
-    end until result.empty?
-    sleep rand 3..10
+unless optn.bare.empty?
+  root = B::IndentedText.new.parse open(optn.bare.shift).read
+  branch = optn.bare.shift
+  if branch
+    c = root[branch]&.children
+    if c.nil?
+      log.e "no such branch #{branch}"
+    end
+  else
+    c = root.children.map(&:children).flatten
+  end
+
+  if c
+    ids = c.map(&:string).map{ $&.to_i if _1 =~ /\d+/ }.compact
+    ids.each do
+      begin
+        result = db.up _1, count:200
+        log.d _1, result.size
+        sleep 2
+      end until result.empty?
+      sleep 3
+    end
   end
 end
 
 if optn[:tweet]
-  array = db.expand_reply db.status optn[:tweet]
-  # puts array.map(&:to_h).pretty_inspect.colorize :blue
-  db.save! array
+  db.get optn[:tweet], with_replies:true
 end
 
-if optn[:uid]
-  db.get_all optn[:uid]
+if optn[:user]
+  db.get_all optn[:user]
 end
 
 if optn[:whois]
@@ -94,7 +113,14 @@ if optn[:whois]
   end
 end
 
-if optn[:irb]
+if optn[:known_users]
+  for uid in db.known_users
+    db.up uid, count:optn[:count]
+    sleep 1
+  end
+end
+
+if optn[:repl]
   # Hello.
   # you can use object twitter, which is a instance of Twitter::REST::Client
   # you can use object db,      which is a instance of DB

@@ -40,26 +40,26 @@ class DB
     @range.find(_id:user_id).first&.[](:smallest)&.-(1)
   end
 
-  def get_all user_id
+  def get_all user_id, count:nil
     cnt = 0
     begin
-      result = up user_id, count:200
+      result = up user_id, count:count
       @log.d result.size
       cnt += result.size
-      sleep 1
+      sleep 2
     end until result.empty?
     begin
-      result = down user_id, count:200
+      result = down user_id, count:count
       @log.d result.size
       cnt += result.size
-      sleep 1
+      sleep 2
     end until result.empty?
     return cnt
   end
 
   def up user_id, count:nil
     tweets = @tclient.user_timeline user_id, {
-      tweet_mode:      :extended,
+      tweet_mode:      'extended',
       count:           count,
       include_rts:     true,
       exclude_replies: false,
@@ -69,13 +69,13 @@ class DB
       [ ]
     else
       update_biggest! user_id, s:tweets.last.id, b:tweets.first.id
-      save! tweets.map{ expand_reply _1 }
+      save tweets
     end
   end
 
   def down user_id, count:nil
     tweets = @tclient.user_timeline user_id, {
-      tweet_mode:      :extended,
+      tweet_mode:      'extended',
       count:           count,
       include_rts:     true,
       exclude_replies: false,
@@ -85,37 +85,37 @@ class DB
       [ ]
     else
       update_smallest! user_id, s:tweets.last.id, b:tweets.first.id
-      save! tweets.map{ expand_reply _1 }
+      save tweets
     end
   end
 
-  def get tweet_id
-    save! expand_reply status tweet_id
-  end
-
-  def expand_reply t
-    r = unless blank?(t.in_reply_to_tweet_id) or has_tweet(t.in_reply_to_tweet_id)
-          status t.in_reply_to_tweet_id
-        end
-    r ? [expand_reply(r), t].flatten : [t]
+  def get id, with_replies:false
+    begin
+      tweet = status id
+      save tweet
+      id = if with_replies
+             sleep 1
+             tweet.in_reply_to_tweet_id
+           end
+    end until blank?(id) or has?(id)
   end
 
   # -> nil or Tweet
   def status id
-    blank?(id) ? nil : @tclient.status(id)
+    blank?(id) ? nil : @tclient.status(id, {tweet_mode:'extended'})
   rescue Twitter::Error => e
-    @log.e e.message
+    @log.e id, e.message
     nil
   end
 
-  # expect user_timeline [Twitter::Tweet]
-  def save! *tweets
+  # expect [Twitter::Tweet]
+  def save *tweets
     tweets = tweets
       .flatten
       .map{ [_1, _1.retweeted_status, _1.quoted_status] }
       .flatten
       .grep_v Twitter::NullObject
-    for t in (tweets).map &:squeeze
+    for t in tweets.map &:squeeze
       @log.d(
         t[:created_at].getlocal.strftime("%F %a %R"),
         t[:user_name],
@@ -125,21 +125,32 @@ class DB
       )
       @tweet.update_one(
         {_id: t[:_id]},
-        {
-          '$setOnInsert':t.except(:favorite_count, :retweet_count),
-          '$set':        t.slice( :favorite_count, :retweet_count),
-        },
+        t,
         {upsert:true}
       )
     end
   end
 
-  def has_tweet id
-    @tweet.find(_id:id).count != 0
+  def has? id
+    not @tweet.find({_id:id},{limit:1}).none?
   end
 
   def find(...)
     @tweet.find(...)
+  end
+
+  def known_users
+    @range.find({},{projection:{_id:1}}).map{ _1[:_id] }
+  end
+
+  def find_tweet id
+    arr = [ ]
+    while id
+      twt = @tweet.find(_id:id).first
+      arr.unshift twt
+      id = twt[:in_reply_to_tweet_id]
+    end
+    return arr
   end
 end
 
