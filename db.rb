@@ -57,19 +57,34 @@ class DB
     return cnt
   end
 
-  def up user_id, count:nil
-    tweets = @tclient.user_timeline user_id, {
-      tweet_mode:      'extended',
-      count:           count,
-      include_rts:     true,
-      exclude_replies: false,
-      since_id:        biggest(user_id),
-    }.compact
+  def reply_ids tweets
+    tweets.map(&:in_reply_to_tweet_id).reject{ blank? _1 or has? _1 }
+  end
+
+  def up user_id, count:nil, with_replies:false
+    tweets = begin
+               @tclient.user_timeline user_id, {
+                 tweet_mode:      'extended',
+                 count:           count,
+                 include_rts:     true,
+                 exclude_replies: false,
+                 since_id:        biggest(user_id),
+               }.compact
+             rescue Twitter::Error => e
+               @log.e user_id, e.message
+               [ ]
+             end
     if tweets.empty?
       [ ]
     else
       update_biggest! user_id, s:tweets.last.id, b:tweets.first.id
-      save tweets
+      result = save tweets
+      if with_replies
+        until (rids = reply_ids tweets).empty?
+          tweets = save rids.map{ sleep 1 ; status _1 }
+        end
+      end
+      result
     end
   end
 
@@ -95,7 +110,7 @@ class DB
       save tweet
       id = if with_replies
              sleep 1
-             tweet.in_reply_to_tweet_id
+             tweet&.in_reply_to_tweet_id
            end
     end until blank?(id) or has?(id)
   end
@@ -110,25 +125,27 @@ class DB
 
   # expect [Twitter::Tweet]
   def save *tweets
-    tweets = tweets
-      .flatten
+    fltn = tweets.flatten.reject{ blank? _1 }
+    fltn
       .map{ [_1, _1.retweeted_status, _1.quoted_status] }
       .flatten
-      .grep_v Twitter::NullObject
-    for t in tweets.map &:squeeze
-      @log.d(
-        t[:created_at].getlocal.strftime("%F %a %R"),
-        t[:user_name],
-        t[:user_id],
-        t[:text].inspect,
-        t[:_id],
-      )
-      @tweet.update_one(
-        {_id: t[:_id]},
-        t,
-        {upsert:true}
-      )
-    end
+      .grep_v(Twitter::NullObject)
+      .map(&:squeeze)
+      .each do |t|
+        @log.d(
+          t[:created_at].getlocal.strftime("%F %a %R"),
+          t[:user_name],
+          t[:user_id],
+          t[:text].inspect,
+          t[:_id],
+        )
+        @tweet.update_one(
+          {_id: t[:_id]},
+          t,
+          {upsert:true}
+        )
+      end
+    return fltn
   end
 
   def has? id

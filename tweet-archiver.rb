@@ -10,24 +10,26 @@ require_relative 'extend.rb'
 require_relative 'db.rb'
 
 optn = B::Option.new(
-  'twitter.consumer_key'        => "YOUR_CONSUMER_KEY",
-  'twitter.consumer_secret'     => "YOUR_CONSUMER_SECRET",
-  'twitter.access_token'        => "YOUR_ACCESS_TOKEN",
-  'twitter.access_token_secret' => "YOUR_ACCESS_TOKEN_SECRET",
+  'twitter.consumer_key'        => "consumer key",
+  'twitter.consumer_secret'     => "consumer secret",
+  'twitter.access_token'        => "access token",
+  'twitter.access_token_secret' => "access token secret",
   'mongo.host'                  => "Host",
   'mongo.db'                    => "Database",
   'mongo.user'                  => "Username",
   'mongo.pw'                    => "Password",
   'mongo.auth'                  => "Authentication database",
+  'trace_replies'               => "trace upstream replies",
   'tweet'                       => "tweet ID",
   'user'                        => "user ID",
   'count'                       => "count",
   'whois'                       => "search user",
   'known_users'                 => 'check all known users',
+  'show'                        => 'show tweets',
   'repl'                        => "run Ruby REPL (irb)",
   'toml'                        => "Config File",
 )
-optn.boolean :repl, :known_users
+optn.boolean :repl, :known_users, :show, :trace_replies
 optn.default(
   'mongo.host' => '127.0.0.1',
   'mongo.db'   => 'twitter',
@@ -48,7 +50,11 @@ optn.normalizer(
   user:   'to_integer',
 )
 optn.short(
-  'known_users' => 'k',
+  'trace_replies' => 'r',
+  'tweet'         => 't',
+  'known_users'   => 'k',
+  'count'         => 'c',
+  'show'          => 's',
 )
 optn.default toml:B::Path.xdgattempt('tweet-archiver.toml', :config)
 optn.make!
@@ -117,6 +123,25 @@ if optn[:known_users]
   for uid in db.known_users
     db.up uid, count:optn[:count]
     sleep 1
+  end
+end
+
+if optn[:show]
+  aoh = db.find(
+    { },
+    sort:{ _id:-1 },
+    projection:{ _id:1, created_at:1, user_screen_name:1, text:1 },
+    limit:optn[:count]
+  )
+  for h in aoh
+    i = h[:_id].to_s.colorize :red
+    d = h[:created_at].getlocal.strftime('%a %H:%M:%S').colorize :cyan
+    u = h[:user_screen_name].colorize(color: :black, background: :green)
+    t = h[:text].gsub(/\n/, ' ')
+    if t =~ /^RT @/
+      t = t.colorize :yellow
+    end
+    puts "#{d} #{u} #{t} #{i}"
   end
 end
 
