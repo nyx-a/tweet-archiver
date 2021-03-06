@@ -110,7 +110,7 @@ if optn[:tweet]
 end
 
 if optn[:user]
-  db.get_all optn[:user]
+  db.get_all optn[:user], count:optn[:count]
 end
 
 if optn[:whois]
