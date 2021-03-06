@@ -121,7 +121,7 @@ end
 
 if optn[:known_users]
   for uid in db.known_users
-    db.up uid, count:optn[:count]
+    db.up uid, count:optn[:count], with_replies:optn[:trace_replies]
     sleep 1
   end
 end
