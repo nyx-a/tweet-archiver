@@ -5,7 +5,6 @@ require 'colorize'
 require_relative 'b.option.rb'
 require_relative 'b.path.rb'
 require_relative 'b.log.rb'
-require_relative 'b.indentedtext.rb'
 require_relative 'db.rb'
 
 optn = B::Option.new(
@@ -83,31 +82,6 @@ db = DB.new(
 )
 
 #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-unless optn.bare.empty?
-  root = B::IndentedText.new.parse open(optn.bare.shift).read
-  branch = optn.bare.shift
-  if branch
-    c = root[branch]&.children
-    if c.nil?
-      log.e "no such branch #{branch}"
-    end
-  else
-    c = root.children.map(&:children).flatten
-  end
-
-  if c
-    ids = c.map(&:string).map{ $&.to_i if _1 =~ /\d+/ }.compact
-    ids.each do
-      begin
-        result = db.up _1, count:200
-        log.d _1, result.size
-        sleep 2
-      end until result.empty?
-      sleep 3
-    end
-  end
-end
 
 if optn[:tweet]
   db.get optn[:tweet], with_replies:true
