@@ -36,7 +36,7 @@ end
 
 #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
-class DB
+class TA
   def initialize host:, db:, user:, pw:, auth:, tw:, log:nil
     @log = log
     @tclient = tw # Twitter::REST::Client

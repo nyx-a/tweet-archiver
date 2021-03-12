@@ -5,7 +5,7 @@ require 'colorize'
 require_relative 'b.option.rb'
 require_relative 'b.path.rb'
 require_relative 'b.log.rb'
-require_relative 'db.rb'
+require_relative 'ta.rb'
 
 optn = B::Option.new(
   'twitter.consumer_key'        => "consumer key",
@@ -17,17 +17,17 @@ optn = B::Option.new(
   'mongo.user'                  => "Username",
   'mongo.pw'                    => "Password",
   'mongo.auth'                  => "Authentication database",
-  'trace_replies'               => "trace upstream replies",
-  'tweet'                       => "tweet ID",
+  'replies'                     => "trace upstream replies",
+  'tweet'                       => "tweet(status) ID",
   'user'                        => "user ID",
   'count'                       => "count",
-  'whois'                       => "search user",
+  'name'                        => "search user with screen_name",
   'known_users'                 => 'check all known users',
   'show'                        => 'show tweets',
   'repl'                        => "run Ruby REPL (irb)",
   'toml'                        => "Config File",
 )
-optn.boolean :repl, :known_users, :show, :trace_replies
+optn.boolean :repl, :known_users, :show, :replies
 optn.default(
   'mongo.host' => '127.0.0.1',
   'mongo.db'   => 'twitter',
@@ -48,7 +48,7 @@ optn.normalizer(
   user:   'to_integer',
 )
 optn.short(
-  'trace_replies' => 'r',
+  'replies'       => 'r',
   'tweet'         => 't',
   'known_users'   => 'k',
   'count'         => 'c',
@@ -71,7 +71,7 @@ twitter.timeouts = {
 
 log = B::Log.new STDOUT, format:'%T.%1N'
 
-db = DB.new(
+ta = TA.new(
   host: optn['mongo.host'],
   db:   optn['mongo.db'],
   user: optn['mongo.user'],
@@ -84,28 +84,35 @@ db = DB.new(
 #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 if optn[:tweet]
-  db.get optn[:tweet], with_replies:true
+  ta.get optn[:tweet], with_replies:true
 end
 
 if optn[:user]
-  db.get_all optn[:user]
+  ta.get_all optn[:user]
 end
 
-if optn[:whois]
-  for i in twitter.user_search(optn[:whois])
-    puts "#{i.id.to_s.colorize :yellow} @#{i.screen_name} #{i.name} #{i.description.inspect.colorize :cyan}"
-  end
+if optn[:name]
+  u = twitter.user_search(optn[:name]).find{
+    _1.screen_name == optn[:name]
+  }
+  puts [
+    u.id.to_s.colorize(:yellow),
+    "@#{u.screen_name}",
+    u.name,
+    u.description.inspect.colorize(:cyan),
+  ].join(' ')
 end
 
 if optn[:known_users]
-  for uid in db.known_users
-    db.up uid, count:optn[:count], with_replies:optn[:trace_replies]
+  for uid in ta.known_users
+    log.d uid
+    ta.up uid, count:optn[:count], with_replies:optn[:replies]
     sleep 1
   end
 end
 
 if optn[:show]
-  aoh = db.find(
+  aoh = ta.find(
     { },
     sort:{ _id:-1 },
     projection:{ _id:1, created_at:1, user_screen_name:1, text:1 },
@@ -126,7 +133,7 @@ end
 if optn[:repl]
   # Hello.
   # you can use object twitter, which is a instance of Twitter::REST::Client
-  # you can use object db,      which is a instance of DB
+  # you can use object ta,      which is a instance of TA
   binding.irb
 end
 
