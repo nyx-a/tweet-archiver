@@ -65,6 +65,11 @@ twitter = Twitter::REST::Client.new(
   access_token:        optn['twitter.access_token'],
   access_token_secret: optn['twitter.access_token_secret'],
 )
+twitter.timeouts = {
+  connect: 60,
+  read:    60,
+  write:   60,
+}
 
 log = B::Log.new STDOUT, format:'%T.%1N'
 
