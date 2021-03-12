@@ -6,7 +6,6 @@ require_relative 'b.option.rb'
 require_relative 'b.path.rb'
 require_relative 'b.log.rb'
 require_relative 'b.indentedtext.rb'
-require_relative 'extend.rb'
 require_relative 'db.rb'
 
 optn = B::Option.new(
