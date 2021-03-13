@@ -1,7 +1,42 @@
 
 require 'mongo'
+require 'twitter'
 
-class DB
+
+def blank? o
+  o.nil? or o.is_a?(Twitter::NullObject) or (o.respond_to?(:empty?) and o.empty?)
+end
+
+def squeeze_tweet t
+  {
+    _id:                     t.id,
+    uri:                     t.uri.to_s,
+    user_id:                 t.user.id,
+    user_name:               t.user.name,
+    user_screen_name:        t.user.screen_name,
+    filter_level:            t.filter_level,
+    in_reply_to_tweet_id:    t.in_reply_to_tweet_id,
+    in_reply_to_user_id:     t.in_reply_to_user_id,
+    in_reply_to_screen_name: t.in_reply_to_screen_name,
+    lang:                    t.lang,
+    source:                  t.source,
+    text:                    t.full_text,
+    created_at:              t.created_at,
+    hashtags:                t.hashtags.map(&:text), # Twitter::Entity::Hashtag
+    symbols:                 t.symbols.map(&:text), # Twitter::Entity::Symbol
+    media:                   t.media.map{{type:_1.type, id:_1.id}}, # Twitter::Media::***
+    user_mentions:           t.user_mentions.map(&:id), # Twitter::Entity::UserMention
+    uris:                    t.uris.map{_1.expanded_url.to_s}, # Twitter::Entity::URI
+    retweeted_status_id:     t.retweeted_status.id,
+    quoted_status_id:        t.quoted_status.id,
+    favorite_count:          t.favorite_count,
+    retweet_count:           t.retweet_count,
+  }.reject{ blank? _2 }
+end
+
+#- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+class TA
   def initialize host:, db:, user:, pw:, auth:, tw:, log:nil
     @log = log
     @tclient = tw # Twitter::REST::Client
@@ -130,7 +165,7 @@ class DB
       .map{ [_1, _1.retweeted_status, _1.quoted_status] }
       .flatten
       .grep_v(Twitter::NullObject)
-      .map(&:squeeze)
+      .map{ squeeze_tweet _1 }
       .each do |t|
         @log.d(
           t[:created_at].getlocal.strftime("%F %a %R"),
