@@ -139,15 +139,19 @@ class TA
     end
   end
 
-  def get id, with_replies:false
+  def get id, with_replies:true
     begin
-      tweet = status id
-      save tweet
-      id = if with_replies
+      indb = find(_id:id).first
+      id = if indb
+             @log.d "already have: #{indb[:text].inspect}"
+             indb[:in_reply_to_tweet_id]
+           else
+             tweet = status id
+             save tweet
              sleep 1
              tweet&.in_reply_to_tweet_id
            end
-    end until blank?(id) or has?(id)
+    end while with_replies and !blank?(id)
   end
 
   # -> nil or Tweet

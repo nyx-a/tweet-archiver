@@ -19,9 +19,9 @@ optn = B::Option.new(
   'mongo.auth'                  => "Authentication database",
   'replies'                     => "trace upstream replies",
   'tweet'                       => "tweet(status) ID",
-  'user'                        => "user ID",
+  'uid'                         => "user ID",
   'count'                       => "count",
-  'name'                        => "search user with screen_name",
+  'uname'                       => "search user with screen_name",
   'known_users'                 => 'check all known users',
   'show'                        => 'show tweets',
   'repl'                        => "run Ruby REPL (irb)",
@@ -45,7 +45,8 @@ optn.essential(
 )
 optn.normalizer(
   count:  'to_integer',
-  user:   'to_integer',
+  uid:    'to_integer',
+  tweet:  'to_integer',
 )
 optn.short(
   'replies'       => 'r',
@@ -84,23 +85,26 @@ ta = TA.new(
 #- - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
 if optn[:tweet]
-  ta.get optn[:tweet], with_replies:true
+  ta.get optn[:tweet], with_replies:optn[:replies]
 end
 
-if optn[:user]
-  ta.get_all optn[:user], count:optn[:count]
+if optn[:uid]
+  ta.get_all optn[:uid], count:optn[:count]
 end
 
-if optn[:name]
-  u = twitter.user_search(optn[:name]).find{
-    _1.screen_name == optn[:name]
+if optn[:uname]
+  u = twitter.user_search(optn[:uname]).find{
+    _1.screen_name == optn[:uname]
   }
-  puts [
-    u.id.to_s.colorize(:yellow),
-    "@#{u.screen_name}",
-    u.name,
-    u.description.inspect.colorize(:cyan),
-  ].join(' ')
+  if u
+    puts [
+      u.id.to_s.colorize(:yellow),
+      "@#{u.screen_name}",
+      u.name,
+      u.description.inspect.colorize(:cyan),
+    ].join(' ')
+    ta.get_all u.id, count:optn[:count]
+  end
 end
 
 if optn[:known_users]
